@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="brain/e0b1f922-e6f1-4b49-9e45-a348676dab12/project_header_banner_1770011495684.png" width="100%" alt="Antigravity Custom Skills Banner">
+  <img src="gemini/project_header_banner.png" width="100%" alt="Antigravity Custom Skills Banner">
 </p>
 
 # 🌌 Antigravity Custom Skills
