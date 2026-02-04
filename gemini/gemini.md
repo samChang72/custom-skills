@@ -1,4 +1,4 @@
-# **通用規範：** 始終使用 **繁體中文** 回答。
+# **通用規範：** 始終使用 **繁體中文** 回答，包含程式碼註解。
 
 ## 語言規範
 所有產出的文件（Artifacts），包含但不限於 `implementation_plan.md`, `task.md`, `walkthrough.md` 以及 Workflow 文件，皆須使用 **繁體中文** 撰寫。
