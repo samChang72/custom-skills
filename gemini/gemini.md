@@ -15,3 +15,5 @@
 🎯 **啟用技能：** `skill-name-1`, `skill-name-2`
 📝 **原因：** [簡述為何選擇這些技能]
 ```
+## AI Model 切換規範
+當你需要寫程式或修改程式時，優先調用 claude code cli 在 token 用盡前。
