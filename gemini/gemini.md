@@ -16,5 +16,9 @@
 📝 **原因：** [簡述為何選擇這些技能]
 ```
 ## AI Model 切換規範
-- 當你需要修改程式時，優先調用 claude code cli 在 token 用盡前。
-- 當你覺得 token 不足時，可以先用 claude code cli 產出程式碼，再用 gemini 產出文件。
+
+> 詳細指引請參考 Skill：`ai-model-routing`
+
+- 當你需要修改程式時，優先調用 Claude Code CLI 在 token 用盡前。
+- 當你覺得 token 不足時，可以先用 Claude Code CLI 產出程式碼，再用 Gemini 產出文件。
+- 程式碼密集型任務交給 Claude，規劃與文件任務留給 Gemini。
