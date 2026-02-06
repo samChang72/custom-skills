@@ -16,4 +16,4 @@
 📝 **原因：** [簡述為何選擇這些技能]
 ```
 ## AI Model 切換規範
-當你需要寫程式或修改程式時，優先調用 claude code cli 在 token 用盡前。
+當你需要修改程式時，優先調用 claude code cli 在 token 用盡前。當你覺得 token 不足時，可以先用 claude code cli 產出程式碼，再用 gemini 產出文件。
