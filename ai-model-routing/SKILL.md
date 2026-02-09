@@ -18,100 +18,195 @@ displayName: AI Model Routing
 
 **模型分工策略：**
 - **Claude Code CLI**：程式碼生成、修改、重構、除錯
-- **Gemini (Antigravity)**：規劃、文件撰寫、研究分析、協調整合
+- **Gemini (Antigravity)**：規劃、文件撰寫、研究分析、協調整合、瀏覽器操作、圖片生成
 
-## 觸發條件
+## 決策流程圖
 
-在以下情況下應考慮模型切換：
-
-1. **程式碼密集型任務** → 優先使用 Claude Code CLI
-2. **Token 用量接近上限** → 分流任務給其他模型
-3. **長時間對話** → 將獨立子任務委派給 Claude
-4. **需要深度程式碼推理** → Claude 較為擅長
-
-## 決策流程
-
-```
-判斷任務類型
-│
-├─ 程式碼修改 (新增/修改/刪除代碼)
-│   └─ 優先使用 Claude Code CLI
-│       └─ 執行指令: claude -p "任務描述"
-│
-├─ 文件撰寫 (README, 規格書, 計畫)
-│   └─ 使用 Gemini (Antigravity)
-│
-├─ 研究分析 (程式碼庫探索, 架構理解)
-│   └─ 使用 Gemini (Antigravity)
-│
-├─ 混合型任務 (程式碼 + 文件)
-│   └─ 先用 Claude 產生程式碼
-│   └─ 再用 Gemini 產生文件
-│
-└─ Token 不足情況
-    └─ 將程式碼任務委派給 Claude
-    └─ Gemini 專注於協調和整合
+```mermaid
+flowchart TD
+    START([收到任務]) --> TYPE{任務類型?}
+    
+    TYPE -->|程式碼修改| SAFE{安全層級?}
+    TYPE -->|文件/規劃| GEMINI[使用 Gemini]
+    TYPE -->|瀏覽器/圖片| GEMINI
+    TYPE -->|混合型| HYBRID[先 Claude 寫 code<br/>再 Gemini 寫文件]
+    
+    SAFE -->|Level 1: 純分析| L1["claude -p 'query'<br/>--tools 'Read,Grep,Glob'"]
+    SAFE -->|Level 2: 唯讀+Git| L2["claude -p 'query'<br/>--allowedTools 'Read,Grep,Glob,<br/>Bash(git diff *),Bash(git log *)'"]
+    SAFE -->|Level 3: 讀寫修改| L3["claude -p 'query'<br/>--allowedTools 'Read,Edit,Write'<br/>--max-turns 10"]
+    SAFE -->|Level 4: 完整權限| L4["claude -p 'query'<br/>--allowedTools 'Read,Edit,Write,Bash'<br/>--max-turns 20 --max-budget-usd 2"]
+    
+    L1 --> VERIFY[Gemini 驗證結果]
+    L2 --> VERIFY
+    L3 --> VERIFY
+    L4 --> VERIFY
+    
+    VERIFY --> DONE([完成])
+    GEMINI --> DONE
+    HYBRID --> DONE
 ```
 
-## Claude Code CLI 使用指南
+## Claude CLI 執行模式
 
-### 基本語法
+| 模式 | 語法 | 用途 |
+|------|------|------|
+| **列印模式** | `claude -p "prompt"` | 自動化、腳本整合 |
+| **管道模式** | `cat file \| claude -p "prompt"` | 傳入大量上下文 |
+| **Session 串接** | `claude -p "prompt" --resume $session_id` | 多步驟任務 |
+
+## 安全層級分類
+
+### Level 1: 純分析（最安全）
+```bash
+# 僅允許讀取操作，無法修改任何檔案
+claude -p "分析這個專案的架構" \
+  --tools "Read,Grep,Glob" \
+  --output-format json
+```
+
+### Level 2: 唯讀 + 受控 Git
+```bash
+# 可執行特定 Git 命令（只讀）
+claude -p "審查最近的 commit" \
+  --allowedTools "Read,Grep,Glob,Bash(git diff *),Bash(git log *),Bash(git status *)"
+```
+
+### Level 3: 讀寫修改
+```bash
+# 可編輯檔案，但不能執行任意 Bash
+claude -p "修復所有 lint 錯誤" \
+  --allowedTools "Read,Edit,Write" \
+  --max-turns 10
+```
+
+### Level 4: 完整權限（需謹慎）
+```bash
+# 完整權限，需設定成本上限
+claude -p "重構整個模組並執行測試" \
+  --allowedTools "Read,Edit,Write,Bash" \
+  --max-turns 20 \
+  --max-budget-usd 2.00 \
+  --fallback-model haiku
+```
+
+## 成本控制機制
 
 ```bash
-# 單行任務
-claude -p "任務描述"
+# 設定預算上限（美元）
+claude -p "大型任務" --max-budget-usd 5.00
 
-# 帶有專案路徑
-claude -p "任務描述" --cwd /path/to/project
+# 限制回合數（避免無限迴圈）
+claude -p "任務" --max-turns 10
 
-# 詳細輸出模式
-claude -p "任務描述" --verbose
+# 過載時自動回退到輕量模型
+claude -p "任務" --fallback-model haiku
 
-# 指定輸出格式
-claude -p "任務描述" --output-format json
+# 組合使用
+claude -p "複雜任務" \
+  --max-budget-usd 2.00 \
+  --max-turns 15 \
+  --fallback-model haiku
 ```
 
-### 任務委派範例
+## 結構化輸出
 
-**程式碼修改任務：**
+### JSON 輸出格式
 ```bash
-claude -p "在 /src/utils/helpers.ts 中新增一個 formatDate 函數，
-接受 Date 物件，返回 YYYY-MM-DD 格式的字串"
+# 取得結構化回應（含 session_id 和 token 使用量）
+claude -p "分析專案" --output-format json
+
+# 回傳結構：
+# {
+#   "result": "...",
+#   "session_id": "abc123",
+#   "usage": { "input_tokens": 150, "output_tokens": 200 }
+# }
 ```
 
-**重構任務：**
+### 強制結構化輸出
 ```bash
-claude -p "將 /src/api/handlers.ts 中的 handleUserCreate 函數
-重構為使用 async/await，並加上適當的錯誤處理"
+# 使用 JSON Schema 確保輸出格式
+claude -p "提取所有 API endpoint" \
+  --output-format json \
+  --json-schema '{
+    "type": "object",
+    "properties": {
+      "endpoints": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "method": {"type": "string"},
+            "path": {"type": "string"}
+          }
+        }
+      }
+    }
+  }'
 ```
 
-**除錯任務：**
+## Session 串接
+
 ```bash
-claude -p "分析 /src/components/Dashboard.tsx 中的效能問題，
-找出不必要的重新渲染並提供修復方案"
+# 第一步：執行任務並取得 session_id
+session_id=$(claude -p "分析 auth.py 的安全問題" \
+  --output-format json | jq -r '.session_id')
+
+# 第二步：延續對話
+claude -p "針對剛才發現的問題，提供修復方案" \
+  --resume "$session_id"
+
+# 第三步：實際修復
+claude -p "執行修復" \
+  --resume "$session_id" \
+  --allowedTools "Read,Edit,Write"
 ```
 
-### 上下文傳遞策略
+## 管道模式
 
-當需要在模型間傳遞上下文時：
+```bash
+# 傳入 Git diff 進行審查
+git diff main | claude -p "審查這些變更，關注安全性" \
+  --output-format json
 
-1. **提供必要的檔案路徑**
-   ```bash
-   claude -p "基於 /src/types/user.ts 的 User 介面，
-   在 /src/services/userService.ts 中實作 getUserById 函數"
-   ```
+# 傳入錯誤日誌進行分析
+cat error.log | claude -p "解釋這個錯誤並提供修復建議"
 
-2. **明確指定預期結果**
-   ```bash
-   claude -p "修改 /src/config/database.ts，
-   新增連線池配置，最大連線數設為 10，逾時設為 30 秒"
-   ```
+# 傳入 build 輸出
+npm run build 2>&1 | claude -p "摘要失敗原因"
+```
 
-3. **提供相關上下文**
-   ```bash
-   claude -p "參考現有的 /src/services/authService.ts 風格，
-   建立新的 /src/services/paymentService.ts"
-   ```
+## 系統提示自訂
+
+```bash
+# 附加提示（推薦：保留預設能力）
+claude -p "任務" \
+  --append-system-prompt "使用 TypeScript，加上完整 JSDoc 註解"
+
+# 從檔案載入（可重複使用）
+claude -p "任務" \
+  --append-system-prompt-file ./project-rules.txt
+
+# 完全取代系統提示（謹慎使用）
+claude -p "任務" \
+  --system-prompt "你是 Python 安全專家"
+```
+
+## 兩階段執行模式
+
+```bash
+# 階段一：規劃（唯讀）
+claude -p "分析並規劃如何實作快取機制，只輸出計畫" \
+  --allowedTools "Read,Grep,Glob" \
+  --output-format json | jq -r '.result' > plan.txt
+
+# 人工審核 plan.txt ...
+
+# 階段二：執行（讀寫）
+claude -p "依照以下計畫實作：$(cat plan.txt)" \
+  --allowedTools "Read,Edit,Write,Bash" \
+  --max-turns 20
+```
 
 ## 模型特性比較
 
@@ -125,81 +220,24 @@ claude -p "分析 /src/components/Dashboard.tsx 中的效能問題，
 | 瀏覽器操作 | ❌ | ⭐⭐⭐⭐⭐ |
 | 圖片生成 | ❌ | ⭐⭐⭐⭐⭐ |
 
-## 實務情境範例
-
-### 情境 1：大型功能開發
-
-**任務**：實作使用者認證模組
-
-**建議流程：**
-1. **Gemini** 規劃架構和 API 設計
-2. **Claude** 實作認證服務程式碼
-3. **Claude** 實作中介層和路由
-4. **Gemini** 撰寫 API 文件和測試計畫
-5. **Claude** 實作測試案例
-
-### 情境 2：Token 不足時的緊急處理
-
-**症狀**：對話變長，回應開始截斷
-
-**處理方式：**
-```bash
-# 將剩餘的程式碼任務交給 Claude
-claude -p "完成以下任務：
-1. 在 /src/api/routes.ts 新增 /api/users/:id 路由
-2. 實作對應的 controller 函數
-3. 加上 Zod 驗證 schema"
-```
-
-**後續**：Gemini 專注於整合結果和撰寫文件
-
-### 情境 3：程式碼審查與修復
-
-**任務**：審查 PR 並修復問題
-
-**建議流程：**
-1. **Gemini** 審查程式碼，列出問題清單
-2. **Claude** 逐一修復發現的問題
-3. **Gemini** 驗證修復結果並更新 PR 描述
-
 ## 錯誤處理
 
-### Claude CLI 執行失敗
-
 ```bash
-# 如果 Claude CLI 無法使用，嘗試以下步驟：
+# 檢查 CLI 是否可用
+which claude && claude --version
 
-# 1. 檢查 CLI 是否已安裝
-which claude
-
-# 2. 檢查 CLI 狀態
-claude --version
-
-# 3. 如果失敗，由 Gemini 直接處理程式碼任務
+# 如果 Claude CLI 不可用，由 Gemini 直接處理
 # （效率較低但可作為備援）
 ```
-
-### 回退策略
-
-當 Claude CLI 不可用時：
-1. **Gemini 直接處理**：小型程式碼修改
-2. **拆分任務**：將大型任務拆成多個小任務
-3. **優先處理**：先處理重要的程式碼修改，文件延後
-
-## 最佳實踐
-
-1. **任務粒度**：給 Claude 的任務應明確且獨立
-2. **上下文完整**：確保提供足夠的檔案路徑和背景資訊
-3. **結果驗證**：Claude 完成後，Gemini 應驗證結果
-4. **記錄保留**：重要的模型切換決策應記錄在 artifact 中
 
 ## 快速參考
 
 ```
-需要寫程式？ → claude -p "..."
+需要寫程式？ → claude -p "..." (優先使用)
 需要寫文件？ → Gemini 直接處理
-Token 不夠？ → 程式碼任務交給 Claude
 需要瀏覽網頁？ → 只能用 Gemini
 需要生成圖片？ → 只能用 Gemini
-需要規劃設計？ → Gemini 先規劃，Claude 執行
+多步驟任務？ → Session 串接
+安全審查？ → Level 1-2 (唯讀)
+自動修復？ → Level 3-4 (讀寫)
 ```
