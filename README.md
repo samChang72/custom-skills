@@ -37,7 +37,6 @@ custom-skills/
 ├── strategic-analysis/      # 商業戰略分析技能
 ├── ai-model-routing/        # AI 模型智慧路由技能
 ├── dual-code-review/        # 雙重代碼審查技能
-├── iterm2-config/           # iTerm2 終端配置
 └── docs/                    # Claude Code CLI 參考文件
 ```
 
@@ -170,7 +169,6 @@ custom-skills/
 
 - [Gemini Skills 總覽](gemini/skills/README.md)
 - [Claude Code CLI 參考](docs/claude-cli-reference.md)
-- [iTerm2 配置](iterm2-config/README.md)
 
 ---
 
