@@ -14,7 +14,7 @@ flowchart TD
     START([開始審查]) --> SCOPE[確定審查範圍]
     SCOPE --> PARALLEL{平行分析}
     
-    PARALLEL --> GEMINI[Antigravity 分析]
+    PARALLEL --> GEMINI[Antigravity 分析<br/>agy-yolo -p]
     PARALLEL --> CLAUDE[Claude CLI 分析]
     
     GEMINI --> COLLECT[收集兩方結果]
@@ -89,9 +89,48 @@ cat /tmp/review_content.txt | claude -p \
   --max-turns 5 | jq '.structured_output' > /tmp/claude_review.json
 ```
 
-#### B. Antigravity 分析
+#### B. Antigravity（Gemini）分析
 
-Gemini 同步進行獨立分析，在讀取 Claude 結果前先完成自己的判斷，以維持獨立性。
+用 `agy-yolo` 叫 Gemini 獨立審查，和 A 同時跑（兩個指令都丟背景），兩邊都跑完才互相比對，以維持獨立性。
+
+- `agy-yolo` 是 `~/.zshrc` 裡的 alias，等於 `agy --dangerously-skip-permissions`。腳本／非互動 shell 不會展開 alias，所以指令裡**寫完整的 `agy --dangerously-skip-permissions`**。
+- `agy -p` **不讀 stdin**：用管線（`|`）傳 diff 會被忽略，Gemini 會回「沒收到程式碼」。diff 要用 `$(cat ...)` 直接放進 prompt。
+- diff 很大（超過約 100KB）時，改成在 prompt 裡寫檔案路徑，請 Gemini 自己讀 `/tmp/review_content.txt`。
+- yolo 模式下 Gemini 可以改檔、跑指令，所以 prompt 一定要寫「只讀不改任何檔案」。
+
+```bash
+agy --dangerously-skip-permissions -p "你是資深程式碼審查員。只讀不改任何檔案。
+請審查以下程式碼變更，重點關注：Bug、安全性、效能、可讀性。以 JSON 回傳發現。
+--- CODE START ---
+$(cat /tmp/review_content.txt)
+--- CODE END ---" \
+  --output-format json \
+  --json-schema '{
+    "type": "object",
+    "properties": {
+      "findings": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "severity": {"type": "string", "enum": ["High", "Medium", "Low"]},
+            "category": {"type": "string"},
+            "file": {"type": "string"},
+            "line": {"type": "integer"},
+            "message": {"type": "string"},
+            "suggestion": {"type": "string"}
+          },
+          "required": ["severity", "category", "message"]
+        }
+      },
+      "summary": {"type": "string"}
+    },
+    "required": ["findings", "summary"]
+  }' \
+  --print-timeout 300s | jq '.structured_output' > /tmp/gemini_review.json
+```
+
+> 從 Antigravity 本身跑這個 skill 時，Gemini 就是執行者自己，不必再呼叫 `agy`，直接自己審查即可。
 
 ### 3. 共識與綜合
 
